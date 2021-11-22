@@ -35,16 +35,21 @@ impl StreamChannel {
         (l, r)
     }
 
-    pub fn write_data_in_vec(&mut self, vec: Vec<u8>) {
-        self.flush().unwrap();
-        self.sender.send(vec).unwrap();
+    pub fn write_data_in_vec(&mut self, vec: Vec<u8>) -> io::Result<()> {
+        self.flush()?;
+        self.sender
+            .send(vec)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
     }
 }
 
 impl Read for StreamChannel {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.reader.is_none() || self.reader.as_ref().unwrap().is_empty() {
-            self.reader = Some(Cursor::new(self.receiver.recv().unwrap()));
+            self.reader =
+                Some(Cursor::new(self.receiver.recv().map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("{}", e))
+                })?));
         }
         self.reader.as_mut().unwrap().read(buf)
     }
