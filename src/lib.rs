@@ -1,4 +1,5 @@
 #![feature(cursor_remaining)]
+#![doc = include_str!("../README.md")]
 
 use std::{
     io::{self, Cursor, Read, Write},
