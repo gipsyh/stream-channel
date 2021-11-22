@@ -1,6 +1,9 @@
 #![feature(cursor_remaining)]
 #![doc = include_str!("../README.md")]
 
+#[cfg(feature = "async")]
+pub mod tokio;
+
 use std::{
     io::{self, Cursor, Read, Write},
     sync::mpsc::{channel, Receiver, Sender},
