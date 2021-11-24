@@ -167,9 +167,9 @@ impl Write for StreamChannel {
 
 #[cfg(test)]
 mod tests {
-    use tokio::io::AsyncReadExt;
     use crate::StreamChannel;
     use std::io::Write;
+    use tokio::io::AsyncReadExt;
 
     #[test]
     fn test() {
@@ -214,6 +214,35 @@ mod tests {
             .unwrap();
         assert_eq!(recv, vec![5, 6]);
         AsyncReadExt::read_exact(&mut r, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![7, 8]);
+    }
+
+    #[tokio::test]
+    async fn async_test_splitc() {
+        let (mut l, r) = StreamChannel::new();
+        let (mut rr, _) = r.split();
+        let send = vec![1, 2, 3, 4];
+        l.write(&send).unwrap();
+        l.flush().unwrap();
+        let send = vec![5, 6, 7, 8];
+        l.write(&send).unwrap();
+        l.flush().unwrap();
+        let mut recv = vec![0; 2];
+        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![1, 2]);
+        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![3, 4]);
+        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![5, 6]);
+        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
             .await
             .unwrap();
         assert_eq!(recv, vec![7, 8]);
