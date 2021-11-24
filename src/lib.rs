@@ -31,7 +31,7 @@ impl Read for StreamChannelRead {
                     io::Error::new(io::ErrorKind::Other, format!("{}", e))
                 })?));
         }
-        self.reader.as_mut().unwrap().read(buf)
+        std::io::Read::read(&mut self.reader.as_mut().unwrap(), buf)
     }
 }
 
@@ -132,7 +132,7 @@ impl StreamChannel {
 
 impl Read for StreamChannel {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read.read(buf)
+        std::io::Read::read(&mut self.read, buf)
     }
 }
 
@@ -167,8 +167,9 @@ impl Write for StreamChannel {
 
 #[cfg(test)]
 mod tests {
+    use tokio::io::AsyncReadExt;
     use crate::StreamChannel;
-    use std::io::{Read, Write};
+    use std::io::Write;
 
     #[test]
     fn test() {
@@ -180,13 +181,41 @@ mod tests {
         l.write(&send).unwrap();
         l.flush().unwrap();
         let mut recv = vec![0; 2];
-        r.read_exact(recv.as_mut()).unwrap();
+        std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
         assert_eq!(recv, vec![1, 2]);
-        r.read_exact(recv.as_mut()).unwrap();
+        std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
         assert_eq!(recv, vec![3, 4]);
-        r.read_exact(recv.as_mut()).unwrap();
+        std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
         assert_eq!(recv, vec![5, 6]);
-        r.read_exact(recv.as_mut()).unwrap();
+        std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
+        assert_eq!(recv, vec![7, 8]);
+    }
+
+    #[tokio::test]
+    async fn async_test() {
+        let (mut l, mut r) = StreamChannel::new();
+        let send = vec![1, 2, 3, 4];
+        l.write(&send).unwrap();
+        l.flush().unwrap();
+        let send = vec![5, 6, 7, 8];
+        l.write(&send).unwrap();
+        l.flush().unwrap();
+        let mut recv = vec![0; 2];
+        AsyncReadExt::read_exact(&mut r, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![1, 2]);
+        AsyncReadExt::read_exact(&mut r, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![3, 4]);
+        AsyncReadExt::read_exact(&mut r, recv.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(recv, vec![5, 6]);
+        AsyncReadExt::read_exact(&mut r, recv.as_mut())
+            .await
+            .unwrap();
         assert_eq!(recv, vec![7, 8]);
     }
 }
