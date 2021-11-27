@@ -12,3 +12,4 @@ description = "stream in channel"
 
 [dependencies]
 tokio = { version = "1.14.0", features = ["full"] }
+tokio-util = "0.6.9"

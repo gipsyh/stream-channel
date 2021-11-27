@@ -3,11 +3,10 @@
 
 use std::{
     io::{self, Cursor, Read, Write},
-    pin::Pin,
-    sync::mpsc::{channel, Receiver, Sender, TryRecvError},
-    task::Poll,
+    sync::mpsc::{channel, Receiver, Sender},
 };
-use tokio::io::AsyncRead;
+
+pub mod async_sc;
 
 pub struct StreamChannelRead {
     receiver: Receiver<Vec<u8>>,
@@ -32,33 +31,6 @@ impl Read for StreamChannelRead {
                 })?));
         }
         std::io::Read::read(&mut self.reader.as_mut().unwrap(), buf)
-    }
-}
-
-impl AsyncRead for StreamChannelRead {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<io::Result<()>> {
-        let sc = self.get_mut();
-        if sc.reader.is_none() || sc.reader.as_ref().unwrap().is_empty() {
-            sc.reader = match sc.receiver.try_recv() {
-                Ok(vec) => Some(Cursor::new(vec)),
-                Err(TryRecvError::Empty) => return Poll::Pending,
-                Err(TryRecvError::Disconnected) => {
-                    return Poll::Ready(Err(io::ErrorKind::Other.into()))
-                }
-            };
-        }
-        let sz =
-            io::Read::read(&mut sc.reader.as_mut().unwrap(), buf.initialize_unfilled()).unwrap();
-        if sz > 0 {
-            buf.advance(sz);
-            Poll::Ready(Ok(()))
-        } else {
-            Poll::Pending
-        }
     }
 }
 
@@ -136,16 +108,6 @@ impl Read for StreamChannel {
     }
 }
 
-impl AsyncRead for StreamChannel {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.get_mut().read).poll_read(cx, buf)
-    }
-}
-
 impl Write for StreamChannel {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write.writer.extend_from_slice(buf);
@@ -169,7 +131,6 @@ impl Write for StreamChannel {
 mod tests {
     use crate::StreamChannel;
     use std::io::Write;
-    use tokio::io::AsyncReadExt;
 
     #[test]
     fn test() {
@@ -188,63 +149,6 @@ mod tests {
         std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
         assert_eq!(recv, vec![5, 6]);
         std::io::Read::read_exact(&mut r, recv.as_mut()).unwrap();
-        assert_eq!(recv, vec![7, 8]);
-    }
-
-    #[tokio::test]
-    async fn async_test() {
-        let (mut l, mut r) = StreamChannel::new();
-        let send = vec![1, 2, 3, 4];
-        l.write(&send).unwrap();
-        l.flush().unwrap();
-        let send = vec![5, 6, 7, 8];
-        l.write(&send).unwrap();
-        l.flush().unwrap();
-        let mut recv = vec![0; 2];
-        AsyncReadExt::read_exact(&mut r, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![1, 2]);
-        AsyncReadExt::read_exact(&mut r, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![3, 4]);
-        AsyncReadExt::read_exact(&mut r, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![5, 6]);
-        AsyncReadExt::read_exact(&mut r, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![7, 8]);
-    }
-
-    #[tokio::test]
-    async fn async_test_splitc() {
-        let (mut l, r) = StreamChannel::new();
-        let (mut rr, _) = r.split();
-        let send = vec![1, 2, 3, 4];
-        l.write(&send).unwrap();
-        l.flush().unwrap();
-        let send = vec![5, 6, 7, 8];
-        l.write(&send).unwrap();
-        l.flush().unwrap();
-        let mut recv = vec![0; 2];
-        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![1, 2]);
-        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![3, 4]);
-        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
-            .await
-            .unwrap();
-        assert_eq!(recv, vec![5, 6]);
-        AsyncReadExt::read_exact(&mut rr, recv.as_mut())
-            .await
-            .unwrap();
         assert_eq!(recv, vec![7, 8]);
     }
 }
